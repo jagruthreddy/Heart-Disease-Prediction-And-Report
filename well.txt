@@ -1,0 +1,32 @@
+import numpy as np
+import pandas as pd
+from sklearn.feature_selection import SelectPercentile, VarianceThreshold, f_classif
+from sklearn.linear_model import SGDClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import make_pipeline, make_union
+from sklearn.svm import LinearSVC
+from tpot.builtins import StackingEstimator
+from tpot.export_utils import set_param_recursive
+
+# NOTE: Make sure that the outcome column is labeled 'target' in the data file
+tpot_data = pd.read_csv('PATH/TO/DATA/FILE', sep='COLUMN_SEPARATOR', dtype=np.float64)
+features = tpot_data.drop('target', axis=1)
+training_features, testing_features, training_target, testing_target = \
+            train_test_split(features, tpot_data['target'], random_state=52)
+
+# Average CV score on the training set was: 0.9024137931034483
+exported_pipeline = make_pipeline(
+    StackingEstimator(estimator=SGDClassifier(alpha=0.001, eta0=0.1, fit_intercept=True, l1_ratio=0.0, learning_rate="constant", loss="perceptron", penalty="elasticnet", power_t=0.1)),
+    StackingEstimator(estimator=SGDClassifier(alpha=0.001, eta0=0.1, fit_intercept=True, l1_ratio=1.0, learning_rate="constant", loss="hinge", penalty="elasticnet", power_t=100.0)),
+    StackingEstimator(estimator=SGDClassifier(alpha=0.001, eta0=0.1, fit_intercept=True, l1_ratio=1.0, learning_rate="constant", loss="hinge", penalty="elasticnet", power_t=0.5)),
+    StackingEstimator(estimator=LinearSVC(C=5.0, dual=True, loss="squared_hinge", penalty="l2", tol=0.01)),
+    StackingEstimator(estimator=LinearSVC(C=0.1, dual=True, loss="hinge", penalty="l2", tol=1e-05)),
+    VarianceThreshold(threshold=0.2),
+    SelectPercentile(score_func=f_classif, percentile=32),
+    LinearSVC(C=0.1, dual=False, loss="squared_hinge", penalty="l1", tol=0.1)
+)
+# Fix random state for all the steps in exported pipeline
+set_param_recursive(exported_pipeline.steps, 'random_state', 52)
+
+exported_pipeline.fit(training_features, training_target)
+results = exported_pipeline.predict(testing_features)
